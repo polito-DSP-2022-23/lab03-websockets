@@ -2,7 +2,7 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './App.css';
 
-import React, { useState, useEffect, useContext, } from 'react';
+import React, { useState, useEffect, useContext, useRef} from 'react';
 import { Container, Toast} from 'react-bootstrap/';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 
@@ -13,9 +13,6 @@ import MessageContext from './messageCtx';
 import API from './API';
 
 const url = 'ws://localhost:5000'
-let ws = new WebSocket(url)
-
-
 
 function App() {
 
@@ -63,72 +60,83 @@ function Main() {
 
   const location = useLocation();
 
+  let socket = useRef(null);
+
   //WebSocket management
+  useEffect(() => {
+    const ws = new WebSocket(url)
 
-  ws.onopen = () => {
-    ws.send('Message From Client');
-  }
-  
-  ws.onerror = (error) => {
-    console.log(`WebSocket error: ${error}`);
-  }
-  
-  ws.onmessage = (e) => {
-    console.log("received" + e)
-    try {
-      messageReceived(e);
-    } catch (error) {
-      console.log(error);
+
+    ws.onopen = () => {
+      ws.send('Message From Client');
     }
     
-  }
-
-  /*
-   * This function handles the receival of WebSocket messages.
-  */
-  const messageReceived = (e) => {
-    let datas = JSON.parse(e.data.toString());
-    if (datas.typeMessage == "login") {
-      let flag = 0;
-      for (var i = 0; i < onlineList.length; i++) {
-        if (onlineList[i].userId == datas.userId) {
-          flag = 1;
-        }
-      }
-      if (flag == 0) {
-        var newArray = onlineList.slice();
-        newArray.push(datas);
-        setOnlineList(newArray);
-      }
+    ws.onerror = (error) => {
+      console.log(`WebSocket error: ${error}`);
     }
-    if (datas.typeMessage == "logout") {
-      var newArray = onlineList.slice();
-      for (var i = 0; i < newArray.length; i++) {
-        if (newArray[i].userId == datas.userId) {
-          newArray.splice(i, 1);
-        }
-      }
-      setOnlineList(newArray);
-    }
-    if (datas.typeMessage == "update") {
-      let flag = 0;
-      var newArray = onlineList.slice();
-      for (var i = 0; i < newArray.length; i++) {
-        if (newArray[i].userId == datas.userId) {
-          flag = 1;
-          newArray[i] = datas;
-          setOnlineList(newArray);
-        }
-      }
-
-      if (flag == 0) {
-        newArray.push(datas);
-        setOnlineList(newArray);
-      }
-    }
-    //setDirty(true);
     
-  }
+    ws.onmessage = (e) => {
+      try {
+        messageReceived(e);
+      } catch (error) {
+        console.log(error);
+      }
+      
+    }
+
+    const messageReceived = (e) => {
+      let datas = JSON.parse(e.data.toString());
+      if (datas.typeMessage == "login") {
+        setOnlineList(currentArray => {
+          var newArray = [...currentArray];
+          let flag = 0;
+          for (var i = 0; i < newArray.length; i++) {
+            if (newArray[i].userId == datas.userId) {
+              flag = 1;
+            }
+          }
+          if (flag == 0) {
+            newArray.push(datas);
+            return newArray;
+          } else {
+            return newArray;
+          }
+        });
+      }
+      if (datas.typeMessage == "logout") {
+        setOnlineList(currentArray => {
+          var newArray = [...currentArray];
+          for (var i = 0; i < newArray.length; i++) {
+            if (newArray[i].userId == datas.userId) {
+              newArray.splice(i, 1);
+            }
+          }
+          return newArray;
+        });
+      }
+      if (datas.typeMessage == "update") {
+        setOnlineList(currentArray => {
+          let flag = 0;
+          var newArray = [...currentArray];
+          for (var i = 0; i < newArray.length; i++) {
+            if (newArray[i].userId == datas.userId) {
+              flag = 1;
+              newArray[i] = datas;
+              return newArray;
+            }
+          }
+    
+          if (flag == 0) 
+            newArray.push(datas);
+          return newArray;
+
+        });
+
+      }  
+    }
+  
+    socket.current = ws;
+  });
 
   useEffect(() => {
     const init = async () => {
