@@ -3,6 +3,8 @@
 const Film = require('../components/film');
 const db = require('../components/db');
 var constants = require('../utils/constants.js');
+var WebSocket = require('../components/websocket');
+var WSMessage = require('../components/ws_message.js');
 
 /**
  * Create a new film
@@ -13,7 +15,7 @@ var constants = require('../utils/constants.js');
  * Output:
  * - the created film
  **/
- exports.createFilm = function(film, owner) {
+exports.createFilm = function(film, owner) {
     return new Promise((resolve, reject) => {
   
       const sql = 'INSERT INTO films(title, owner, private, watchDate, rating, favorite) VALUES(?,?,?,?,?,?)';
@@ -237,38 +239,60 @@ var constants = require('../utils/constants.js');
  * Output:
  * - no response expected for this operation
  **/
- exports.deleteSinglePublicFilm = function(filmId, owner) {
-  return new Promise((resolve, reject) => {
-      const sql1 = "SELECT owner FROM films f WHERE f.id = ?";
-      db.all(sql1, [filmId], (err, rows) => {
-          if (err)
-              reject(err);
-          else if (rows.length === 0)
+exports.deleteSinglePublicFilm = function(filmId, owner) {
+    return new Promise((resolve, reject) => {
+        const sql1 = "SELECT owner FROM films f WHERE f.id = ?";
+        db.all(sql1, [filmId], (err, rows) => {
+            if (err)
+                reject(err);
+            else if (rows.length === 0)
+                reject(404);
+            else if(rows[0].private == 1)
               reject(404);
-          else if(rows[0].private == 1)
-            reject(404);
-          else if(owner != rows[0].owner) {
-              reject(403);
-          }
-          else {
-              const sql2 = 'DELETE FROM reviews WHERE filmId = ?';
-              db.run(sql2, [filmId], (err) => {
-                  if (err)
-                      reject(err);
-                  else {
-                      const sql3 = 'DELETE FROM films WHERE id = ?';
-                      db.run(sql3, [filmId], (err) => {
-                          if (err)
-                              reject(err);
-                          else
-                              resolve(null);
-                      })
+            else if(owner != rows[0].owner) {
+                reject(403);
+            }
+            else {
+              const sql2 = 'SELECT * FROM reviews WHERE filmId = ?';
+              db.all(sql2, [filmId], (err, rows2) => {
+                  var activeReviewer = [];
+                  for(const row of rows2){
+                      if(row.active == 1){
+                          activeReviewer.push(row.reviewerId);
+                      }
                   }
+                  const sql3 = 'DELETE FROM reviews WHERE filmId = ?';
+                  db.run(sql3, [filmId], (err) => {
+                      if (err)
+                          reject(err);
+                      else {
+                          const sql4 = 'DELETE FROM films WHERE id = ?';
+                          db.run(sql4, [filmId], (err) => {
+                              if (err)
+                                  reject(err);
+                              else{
+                                  //if the film was active for some users, inform the clients that it is not active anymore because it has been deleted
+                                  if(activeReviewer.length != 0)
+                                  {
+                                    for (var i = 0; i < activeReviewer.length; i++) {
+                                        var oldMessage = WebSocket.getMessage(activeReviewer[i]);
+                                        var updateMessage = new WSMessage('update', parseInt(activeReviewer[i]), oldMessage.userName, null, null);
+                                        WebSocket.sendAllClients(updateMessage);
+                                        WebSocket.saveMessage(activeReviewer[i], new WSMessage('login', parseInt(activeReviewer[i]), oldMessage.userName, null, null));
+                                    } 
+                                  }
+  
+                                  resolve(null);
+                              }
+                          })
+                      }
+                  })
               })
-          }
-      });
-  });
-}
+                
+            }
+        });
+    });
+  }
 
 
 

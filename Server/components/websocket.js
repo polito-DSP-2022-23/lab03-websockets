@@ -22,13 +22,13 @@ module.exports.sendAllClients = function sendAllClients(message) {
 };
 
 module.exports.saveMessage = function saveMessage(userId, message) {
-    loginMessagesMap.set(userId, message);
+    loginMessagesMap.set(parseInt(userId), message);
 };
 
 module.exports.getMessage = function getMessage(userId) {
-    loginMessagesMap.get(userId);
+    return loginMessagesMap.get(parseInt(userId));
 };
 
 module.exports.deleteMessage = function deleteMessage(userId) {
-    loginMessagesMap.delete(userId);
+    loginMessagesMap.delete(parseInt(userId));
 };
